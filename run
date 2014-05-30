@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -e -u -o pipefail
 
 chown -R mysql:mysql /var/lib/mysql
 mysql_install_db --user mysql > /dev/null
@@ -8,6 +8,7 @@ MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-""}
 MYSQL_DATABASE=${MYSQL_DATABASE:-""}
 MYSQL_USER=${MYSQL_USER:-""}
 MYSQL_PASSWORD=${MYSQL_PASSWORD:-""}
+MYSQL_BOOTSTRAP_SCRIPT=${MYSQL_BOOTSTRAP_SCRIPT:-""}
 MYSQLD_ARGS=${MYSQLD_ARGS:-""}
 
 tfile=`mktemp`
@@ -32,5 +33,27 @@ fi
 
 /usr/sbin/mysqld --bootstrap --verbose=0 $MYSQLD_ARGS < $tfile
 rm -f $tfile
+
+if [[ -n $MYSQL_BOOTSTRAP_SCRIPT && -f $MYSQL_BOOTSTRAP_SCRIPT && ! -e /var/lib/mysql/.bootstrapped ]]; then
+    cat $MYSQL_BOOTSTRAP_SCRIPT >> $tfile
+
+    /usr/bin/mysqld_safe > /dev/null 2>&1 &
+
+    RET=1
+    while [[ RET -ne 0 ]]; do
+        echo "=> Waiting for confirmation of MySQL service startup"
+        sleep 5
+        set +e
+        mysql -uroot -p$MYSQL_ROOT_PASSWORD -e "status" > /dev/null 2>&1
+        RET=$?
+        set -e
+    done
+
+    mysql -uroot -p$MYSQL_ROOT_PASSWORD $MYSQL_DATABASE < $MYSQL_BOOTSTRAP_SCRIPT
+
+    mysqladmin -uroot -p$MYSQL_ROOT_PASSWORD shutdown
+    sleep 5
+    touch /var/lib/mysql/.bootstrapped
+fi
 
 exec /usr/sbin/mysqld $MYSQLD_ARGS
