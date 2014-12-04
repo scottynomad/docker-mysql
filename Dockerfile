@@ -1,6 +1,9 @@
 FROM ubuntu:14.04
 MAINTAINER Scott Wilson <scott.wilson@gmail.com>
 
+# add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
+RUN groupadd -g 999 -r mysql && useradd -u 999 -r -g mysql mysql
+
 RUN apt-get update -qq && apt-get install -y mysql-server-5.6
 
 ADD my.cnf /etc/mysql/conf.d/my.cnf
